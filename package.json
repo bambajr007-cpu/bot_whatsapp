@@ -1,0 +1,14 @@
+{
+  "name": "onyx-bot-minimal",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.8",
+    "express": "^4.19.2",
+    "pino": "^9.0.0",
+    "fs-extra": "^11.2.0"
+  }
+}
