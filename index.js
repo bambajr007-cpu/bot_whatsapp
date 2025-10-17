@@ -27,10 +27,10 @@ const commands = new Map();
 
 // LOGGER SIMPLE
 const log = {
-  info: (msg) => console.log([INFO] ${msg}),
-  success: (msg) => console.log([✅] ${msg}),
-  warn: (msg) => console.log([⚠] ${msg}),
-  error: (msg) => console.log([❌] ${msg})
+  info: (msg) => console.log(`[INFO] ${msg}`),
+  success: (msg) => console.log(`[✅] ${msg}`),
+  warn: (msg) => console.log(`[⚠] ${msg}`),
+  error: (msg) => console.log(`[❌] ${msg}`)
 };
 
 // CHARGER COMMANDES
@@ -42,19 +42,19 @@ async function loadCommands() {
   
   for (const file of files) {
     try {
-      const cmd = await import(./cmd/${file});
+      const cmd = await import(`./cmd/${file}`);
       const command = cmd.default || cmd;
       
       if (command.name && command.execute) {
         commands.set(command.name, command);
-        log.success(Chargé: ${file});
+        log.success(`Chargé: ${file}`);
       }
     } catch (error) {
-      log.error(Erreur ${file}: ${error.message});
+      log.error(`Erreur ${file}: ${error.message}`);
     }
   }
   
-  log.success(${commands.size} commandes chargées);
+  log.success(`${commands.size} commandes chargées`);
 }
 
 // TRAITER MESSAGES
@@ -74,12 +74,12 @@ async function handleMessages(sock, m) {
   const from = msg.key.remoteJid;
   const sender = msg.key.participant || from;
   
-  log.info(Commande: ${cmdName} de ${sender});
+  log.info(`Commande: ${cmdName} de ${sender}`);
   
   try {
     await command.execute(sock, { from, sender, body: text }, args);
   } catch (error) {
-    log.error(Erreur commande ${cmdName}: ${error.message});
+    log.error(`Erreur commande ${cmdName}: ${error.message}`);
     await sock.sendMessage(from, { text: '❌ Erreur' });
   }
 }
@@ -120,8 +120,8 @@ async function startBot() {
     setTimeout(async () => {
       try {
         const code = await sock.requestPairingCode(phoneNumber);
-        log.success(CODE: ${code});
-        log.info(Ouvre: http://localhost:${config.port}/pair);
+        log.success(`CODE: ${code}`);
+        log.info(`Ouvre: http://localhost:${config.port}/pair`);
         
         setTimeout(() => {
           if (!sock.user) {
@@ -129,7 +129,7 @@ async function startBot() {
           }
         }, 60000);
       } catch (err) {
-        log.error(Pairing: ${err.message});
+        log.error(`Pairing: ${err.message}`);
         isPairingRequested = false;
       }
     }, 3000);
@@ -186,7 +186,7 @@ function startWebServer() {
   });
   
   app.listen(config.port, () => {
-    log.success(Serveur: http://localhost:${config.port});
+    log.success(`Serveur: http://localhost:${config.port}`);
   });
 }
 
