@@ -1,0 +1,14 @@
+# Secrets
+.env
+.env.*
+
+# Session WhatsApp
+session/
+session/*
+
+# Node
+node_modules/
+*.log
+
+# Data
+data/
