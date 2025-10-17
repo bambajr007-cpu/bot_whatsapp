@@ -21,7 +21,7 @@ const config = {
 
 // VARIABLES GLOBALES
 let sock;
-let isPairingRequested = false;
+let isRequestingCode = false;
 const msgRetryCounterCache = new Map();
 const commands = new Map();
 
@@ -95,57 +95,41 @@ async function startBot() {
   sock = makeWASocket({
     version,
     logger: pino({ level: 'silent' }),
-    printQRInTerminal: false,
+    printQRInTerminal: false, // DOIT ÊTRE FALSE pour pairing code
     auth: {
       creds: state.creds,
       keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' }))
     },
     browser: Browsers.ubuntu('Chrome'),
-    markOnlineOnConnect: false,
+    markOnlineOnConnect: true,
     syncFullHistory: false,
     connectTimeoutMs: 60000,
-    keepAliveIntervalMs: undefined,
-    maxMsgRetryCount: 3,
+    defaultQueryTimeoutMs: undefined,
+    keepAliveIntervalMs: 10000,
+    emitOwnEvents: false,
+    fireInitQueries: true,
+    generateHighQualityLinkPreview: true,
+    syncFullHistory: false,
+    markOnlineOnConnect: true,
     msgRetryCounterCache,
     getMessage: async (key) => {
       return msgRetryCounterCache.get(key.id) || undefined;
     }
   });
   
-  // PAIRING CODE
-  if (!sock.authState.creds.registered && !isPairingRequested) {
-    isPairingRequested = true;
-    const phoneNumber = config.botNumber.replace(/[^0-9]/g, '');
-    
-    setTimeout(async () => {
-      try {
-        const code = await sock.requestPairingCode(phoneNumber);
-        log.success(`CODE: ${code}`);
-        log.info(`Ouvre: http://localhost:${config.port}/pair`);
-        
-        setTimeout(() => {
-          if (!sock.user) {
-            isPairingRequested = false;
-          }
-        }, 60000);
-      } catch (err) {
-        log.error(`Pairing: ${err.message}`);
-        isPairingRequested = false;
-      }
-    }, 3000);
-  }
-  
   // ÉVÉNEMENTS
   sock.ev.on('creds.update', saveCreds);
   
   sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect } = update;
+    const { connection, lastDisconnect, qr } = update;
     
+    // DEMANDER LE PAIRING CODE ICI (CRITIQUE!)
     if (connection === 'close') {
       const code = lastDisconnect?.error?.output?.statusCode;
       
       if (code === DisconnectReason.loggedOut) {
-        log.error('Déconnecté');
+        log.error('Déconnecté - Supprimez le dossier session/');
+        await fs.remove('./session');
         process.exit(0);
       } else {
         log.warn('Reconnexion...');
@@ -154,9 +138,38 @@ async function startBot() {
       }
     }
     
+    // DEMANDER CODE QUAND LA CONNEXION EST OUVERTE
     if (connection === 'open') {
-      log.success('Bot connecté!');
-      await sock.sendMessage(config.owner, { text: '✅ Bot en ligne' });
+      log.success('✅ Bot connecté!');
+      isRequestingCode = false;
+      
+      // Envoyer message au propriétaire
+      try {
+        await sock.sendMessage(config.owner, { text: '✅ Bot en ligne' });
+      } catch (err) {
+        log.warn('Impossible d\'envoyer le message au propriétaire');
+      }
+    }
+    
+    // PAIRING CODE - ATTENTION: Doit être après 'open' ou pendant 'connecting'
+    if ((connection === 'connecting' || qr) && !sock.authState.creds.registered && !isRequestingCode) {
+      isRequestingCode = true;
+      
+      // Attendre un peu que la connexion se stabilise
+      await delay(2000);
+      
+      try {
+        const phoneNumber = config.botNumber.replace(/[^0-9]/g, '');
+        log.info(`Demande du code pour: ${phoneNumber}`);
+        
+        const code = await sock.requestPairingCode(phoneNumber);
+        log.success(`\n\n🔑 CODE DE JUMELAGE: ${code}\n`);
+        log.info(`Entrez ce code dans WhatsApp > Appareils Liés > Lier un appareil > Entrer le code\n`);
+        
+      } catch (err) {
+        log.error(`Erreur pairing: ${err.message}`);
+        isRequestingCode = false;
+      }
     }
   });
   
@@ -178,11 +191,17 @@ function startWebServer() {
   const app = express();
   
   app.get('/', (req, res) => {
-    res.send('<h1>Bot Online</h1>');
+    res.send(`
+      <h1>Bot WhatsApp Online</h1>
+      <p>Status: ${sock?.user ? 'Connecté ✅' : 'Hors ligne ❌'}</p>
+    `);
   });
   
   app.get('/health', (req, res) => {
-    res.json({ status: sock?.user ? 'online' : 'offline' });
+    res.json({ 
+      status: sock?.user ? 'online' : 'offline',
+      user: sock?.user || null
+    });
   });
   
   app.listen(config.port, () => {
@@ -192,7 +211,7 @@ function startWebServer() {
 
 // INIT
 (async () => {
-  log.info('Démarrage du bot...');
+  log.info('🚀 Démarrage du bot...');
   await loadCommands();
   startWebServer();
   await startBot();
